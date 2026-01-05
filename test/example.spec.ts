@@ -4,7 +4,7 @@ describe('example tests', () => {
 
     it('tests utilize the seed data too', async () => {
         const trayOrderRecipes = await db.trayOrderRecipe.findMany()
-        expect(trayOrderRecipes.length).toBe(3)
+        expect(trayOrderRecipes.length).toBe(4)
         await db.trayOrderRecipe.deleteMany()
         const trayOrderRecipesAfter = await db.trayOrderRecipe.findMany()
         expect(trayOrderRecipesAfter.length).toBe(0)
@@ -12,6 +12,6 @@ describe('example tests', () => {
 
     it('the seed data is reset before each test', async () => {
         const trayOrderRecipes = await db.trayOrderRecipe.findMany()
-        expect(trayOrderRecipes.length).toBe(3)
+        expect(trayOrderRecipes.length).toBe(4)
     })
 })

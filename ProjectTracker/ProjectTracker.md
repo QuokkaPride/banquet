@@ -107,3 +107,23 @@ npm start                   # Should run without errors
 # After Step 10
 npm test                    # All tests should pass
 ```
+
+---
+
+## Test Data Enhancement
+
+| Step | Task | Status |
+|------|------|--------|
+| 12 | Read rationale document | ✅ |
+| 13 | Update prisma/schema.prisma | ✅ |
+| 14a | Create migration file | ✅ |
+| 14b | Run db-up and prisma generate | ✅ |
+| 14c | Run prisma db push | ✅ |
+| 15a | Update patients.csv | ✅ |
+| 15b | Update patient_diet_orders.csv | ✅ |
+| 15c | Update recipes.csv | ✅ |
+| 15d | Update tray_orders.csv | ✅ |
+| 15e | Update tray_order_recipes.csv | ✅ |
+| 15f | Run db-clean and reseed | ✅ |
+| 16 | Create test/smartOrdering.spec.ts | 🔄 |
+| 17 | Run validation queries | ⬜ |

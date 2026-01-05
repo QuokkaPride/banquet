@@ -1,3 +1,28 @@
+# 2026-01-06_13_schema-update.md
+# Step 13: Update Prisma Schema for Meal Time Suitability
+
+## Metadata
+- **Order**: 13 of 16
+- **Estimated Time**: 5 minutes
+- **Dependencies**: Step 12 (rationale)
+- **Creates**: Updated `prisma/schema.prisma`
+
+## Purpose
+Add `suitableMealTimes` field to Recipe model so we can filter breakfast items from dinner.
+
+---
+
+## Prompt for LLM
+
+Update `prisma/schema.prisma` to add a `suitableMealTimes` field to the Recipe model.
+
+The field should:
+- Be a String type
+- Default to "BREAKFAST,LUNCH,DINNER" (available for all meals)
+- Map to column name "suitable_meal_times"
+
+This is the complete updated schema:
+```prisma
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -75,5 +100,14 @@ model TrayOrderRecipe {
   trayOrder   TrayOrder @relation(fields: [trayOrderId], references: [id])
   trayOrderId String    @map("tray_order_id")
 
-    @@map("tray_order_recipes")
+  @@map("tray_order_recipes")
 }
+```
+
+---
+
+## Validation Checklist
+- [ ] Schema updated at `prisma/schema.prisma`
+- [ ] Recipe model has `suitableMealTimes` field
+- [ ] Field maps to `suitable_meal_times` column
+- [ ] Default value is "BREAKFAST,LUNCH,DINNER"

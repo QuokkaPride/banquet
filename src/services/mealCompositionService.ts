@@ -15,7 +15,7 @@
  * TODO: [OPTIMIZATION] Batch similar meals for kitchen efficiency
  */
 
-import { Recipe } from '@prisma/client';
+import { Recipe, MealTime } from '@prisma/client';
 import { db } from '../db';
 import { SelectionContext, ComposedMeal, FactorEvaluationResult } from '../types/orderingTypes';
 import { MEAL_COMPOSITION_RULES, RECIPE_CATEGORIES } from '../config/orderingConfig';
@@ -40,16 +40,35 @@ interface RecipesByCategory {
 }
 
 /**
- * Fetches all recipes from the database, grouped by category.
+ * Checks if a recipe is suitable for the given meal time.
  */
-async function fetchRecipesByCategory(): Promise<RecipesByCategory> {
+function isRecipeSuitableForMealTime(recipe: Recipe, mealTime: MealTime): boolean {
+  // suitableMealTimes is stored as comma-separated string like "BREAKFAST,LUNCH,DINNER"
+  const suitableTimes = recipe.suitableMealTimes.split(',').map((t) => t.trim());
+  return suitableTimes.includes(mealTime);
+}
+
+/**
+ * Fetches all recipes from the database, grouped by category,
+ * filtered by meal time appropriateness.
+ */
+async function fetchRecipesByCategory(mealTime: MealTime): Promise<RecipesByCategory> {
   const allRecipes = await db.recipe.findMany();
 
+  // Filter recipes that are suitable for this meal time
+  const suitableRecipes = allRecipes.filter((r) => isRecipeSuitableForMealTime(r, mealTime));
+
+  logger.info('Filtered recipes by meal time', {
+    mealTime,
+    totalRecipes: allRecipes.length,
+    suitableRecipes: suitableRecipes.length,
+  });
+
   return {
-    entrees: allRecipes.filter((r) => r.category === RECIPE_CATEGORIES.ENTREES),
-    sides: allRecipes.filter((r) => r.category === RECIPE_CATEGORIES.SIDES),
-    beverages: allRecipes.filter((r) => r.category === RECIPE_CATEGORIES.BEVERAGES),
-    desserts: allRecipes.filter((r) => r.category === RECIPE_CATEGORIES.DESSERTS),
+    entrees: suitableRecipes.filter((r) => r.category === RECIPE_CATEGORIES.ENTREES),
+    sides: suitableRecipes.filter((r) => r.category === RECIPE_CATEGORIES.SIDES),
+    beverages: suitableRecipes.filter((r) => r.category === RECIPE_CATEGORIES.BEVERAGES),
+    desserts: suitableRecipes.filter((r) => r.category === RECIPE_CATEGORIES.DESSERTS),
   };
 }
 
@@ -146,7 +165,7 @@ export async function composeMealWithinConstraints(
     calorieRange: context.calorieRange,
   });
 
-  const recipesByCategory = await fetchRecipesByCategory();
+  const recipesByCategory = await fetchRecipesByCategory(context.mealTime);
   const allFactorResults: FactorEvaluationResult[] = [];
   const selectedRecipes: Recipe[] = [];
 
