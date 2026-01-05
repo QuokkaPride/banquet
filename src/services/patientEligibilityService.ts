@@ -54,49 +54,83 @@ export async function findPatientsRequiringMealOrder(
 }
 
 /**
- * Resolves calorie constraints for a patient.
- * Uses DietOrder if available, otherwise falls back to system defaults.
+ * Resolves calorie constraints for a patient, accounting for calories already consumed.
+ * If we gave them a low-calorie meal earlier, we catch up in later meals.
  */
-export async function resolveCalorieConstraints(patientId: string): Promise<CalorieRange> {
-  logger.info('Resolving calorie constraints', { patientId });
+export async function resolveCalorieConstraints(
+  patientId: string,
+  currentMealTime: MealTime
+): Promise<CalorieRange> {
+  logger.info('Resolving calorie constraints', { patientId, currentMealTime });
 
   const patientDietOrder = await db.patientDietOrder.findFirst({
     where: { patientId },
     include: { dietOrder: true },
   });
 
+  // Get daily limits
+  let dailyMin = DEFAULT_CALORIE_RANGE.minimum * 3;
+  let dailyMax = DEFAULT_CALORIE_RANGE.maximum * 3;
+  let source: 'DIET_ORDER' | 'SYSTEM_DEFAULT' = 'SYSTEM_DEFAULT';
+
   if (
     patientDietOrder?.dietOrder &&
     patientDietOrder.dietOrder.minimumCalories != null &&
     patientDietOrder.dietOrder.maximumCalories != null
   ) {
-    // DietOrder calories are daily limits - divide by 3 meals to get per-meal targets
-    const MEALS_PER_DAY = 3;
-    const perMealMin = Math.round(patientDietOrder.dietOrder.minimumCalories / MEALS_PER_DAY);
-    const perMealMax = Math.round(patientDietOrder.dietOrder.maximumCalories / MEALS_PER_DAY);
-
-    logger.info('Using physician-ordered diet constraints', {
-      patientId,
-      dietOrderName: patientDietOrder.dietOrder.name,
-      dailyMinimum: patientDietOrder.dietOrder.minimumCalories,
-      dailyMaximum: patientDietOrder.dietOrder.maximumCalories,
-      perMealMinimum: perMealMin,
-      perMealMaximum: perMealMax,
-    });
-
-    return {
-      minimum: perMealMin,
-      maximum: perMealMax,
-      source: 'DIET_ORDER',
-    };
+    dailyMin = patientDietOrder.dietOrder.minimumCalories;
+    dailyMax = patientDietOrder.dietOrder.maximumCalories;
+    source = 'DIET_ORDER';
   }
 
-  logger.warn('No diet order - using defaults. ORDER REQUIRES STAFF REVIEW.', {
-    patientId,
-    defaults: DEFAULT_CALORIE_RANGE,
+  // Get calories already consumed from orders WE created
+  const existingOrders = await db.trayOrder.findMany({
+    where: { patientId },
+    include: { recipes: { include: { recipe: true } } },
   });
 
-  return DEFAULT_CALORIE_RANGE;
+  let caloriesConsumed = 0;
+  const mealsAlreadyOrdered: MealTime[] = [];
+
+  for (const order of existingOrders) {
+    mealsAlreadyOrdered.push(order.mealTime);
+    for (const tr of order.recipes) {
+      caloriesConsumed += tr.recipe.calories;
+    }
+  }
+
+  // Count remaining meals (including current one)
+  const allMeals: MealTime[] = ['BREAKFAST', 'LUNCH', 'DINNER'];
+  const remainingMeals = allMeals.filter(
+    (m) => !mealsAlreadyOrdered.includes(m) || m === currentMealTime
+  );
+  const mealsLeft = remainingMeals.length;
+
+  // Calculate per-meal targets based on remaining budget
+  const remainingMin = Math.max(0, dailyMin - caloriesConsumed);
+  const remainingMax = Math.max(0, dailyMax - caloriesConsumed);
+
+  const perMealMin = mealsLeft > 0 ? Math.round(remainingMin / mealsLeft) : 0;
+  const perMealMax = mealsLeft > 0 ? Math.round(remainingMax / mealsLeft) : dailyMax;
+
+  logger.info('Calorie calculation with catch-up', {
+    patientId,
+    dailyMin,
+    dailyMax,
+    caloriesConsumed,
+    mealsLeft,
+    perMealMin,
+    perMealMax,
+    source,
+  });
+
+  if (source === 'SYSTEM_DEFAULT') {
+    logger.warn('No diet order - using defaults. ORDER REQUIRES STAFF REVIEW.', {
+      patientId,
+    });
+  }
+
+  return { minimum: perMealMin, maximum: perMealMax, source };
 }
 
 /**
@@ -106,7 +140,7 @@ export async function buildSelectionContext(
   patientId: string,
   mealTime: MealTime
 ): Promise<SelectionContext> {
-  const calorieRange = await resolveCalorieConstraints(patientId);
+  const calorieRange = await resolveCalorieConstraints(patientId, mealTime);
 
   // TODO: [SCHEMA] Load allergies when Patient.allergies exists
   // TODO: [SCHEMA] Load texture requirement when Patient.textureRequirement exists

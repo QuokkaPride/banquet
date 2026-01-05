@@ -1,126 +1,46 @@
 # AWS Deployment Architecture
 
-## Current Implementation (MVP)
+## Overview
 
-### Architecture Diagram
+The Smart Ordering system is deployed as a serverless application on AWS, optimized for simplicity and low operational cost.
+
+## Architecture
+
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         AWS Cloud                                    │
-│                                                                      │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐ │
-│  │  EventBridge │────▶│    Lambda    │────▶│   RDS PostgreSQL     │ │
-│  │    (Cron)    │     │   Function   │     │    (db.t3.micro)     │ │
-│  └──────────────┘     └──────────────┘     └──────────────────────┘ │
-│        │                     │                                       │
-│        ▼                     ▼                                       │
-│  Schedule:            ┌──────────────┐                              │
-│  - 5:00 AM            │  CloudWatch  │                              │
-│  - 9:00 AM            │    Logs      │                              │
-│  - 3:00 PM            └──────────────┘                              │
-└─────────────────────────────────────────────────────────────────────┘
+EventBridge (every 5 min) → Lambda → RDS PostgreSQL
+                              ↓
+                         CloudWatch Logs
+                              ↓
+                         SNS (Staff Alerts)
+                              ↑
+                         API Gateway (EMR/EHR Integration)
 ```
 
-### Components Table
+## Components
 
-| Component | AWS Service | Configuration | Purpose |
-|-----------|-------------|---------------|---------|
-| Scheduler | EventBridge | Cron: `0 5,9,15 * * ? *` | Trigger at meal windows |
-| Compute | Lambda | Node.js 20, 512MB, 5min | Execute ordering |
-| Database | RDS PostgreSQL | db.t3.micro | Store data |
-| Logging | CloudWatch Logs | 30-day retention | Audit trail |
+| Service | Purpose | Configuration |
+|---------|---------|---------------|
+| **EventBridge** | Triggers ordering system | `rate(5 minutes)` |
+| **Lambda** | Executes smart ordering logic | Node.js 20, 512MB, 5min timeout |
+| **RDS PostgreSQL** | Stores patients, orders, recipes | db.t3.micro, encrypted |
+| **CloudWatch** | Audit logging & monitoring | 30-day retention |
+| **SNS** | Staff notifications for flagged orders | Topics by priority |
+| **API Gateway** | External system integration | REST API for EMR/EHR |
 
-### Estimated Monthly Cost (Low Volume)
+## Why This Architecture
 
-- Lambda: ~$0 (free tier)
-- RDS db.t3.micro: ~$15/month
-- EventBridge: ~$0 (free tier)
-- CloudWatch: ~$1/month
-- **Total: ~$16/month**
+- **Serverless**: No servers to manage, automatic scaling
+- **Cost-effective**: ~$16/month base (Lambda free tier, RDS ~$15)
+- **Simple**: 4 core components, easy to understand and maintain
+- **Extensible**: SNS + API Gateway support future integrations
 
----
+## Future Integrations (via API Gateway)
 
-## Scaled Architecture (Production)
+- EMR/EHR systems for real-time patient data
+- Nursing station dashboard
+- Kitchen display system
+- Dietitian review workflow
 
-### Architecture Diagram
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              AWS Cloud                                       │
-│                                                                              │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                   │
-│  │ EventBridge │────▶│   Lambda    │────▶│     SQS     │                   │
-│  │   (Cron)    │     │ (Scheduler) │     │   Queue     │                   │
-│  └─────────────┘     └─────────────┘     └──────┬──────┘                   │
-│                                                  │                          │
-│                                                  ▼                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                        Step Functions                                │   │
-│  │  ┌─────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐ │   │
-│  │  │ Check   │──▶│   Compose   │──▶│   Create    │──▶│   Notify    │ │   │
-│  │  │Eligiblty│   │    Meal     │   │   Order     │   │   Staff     │ │   │
-│  │  └─────────┘   └─────────────┘   └─────────────┘   └─────────────┘ │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│         │                │                   │                │             │
-│         ▼                ▼                   ▼                ▼             │
-│  ┌─────────────┐  ┌─────────────┐    ┌─────────────┐  ┌─────────────┐      │
-│  │ ElastiCache │  │   Lambda    │    │     RDS     │  │     SNS     │      │
-│  │   (Redis)   │  │  Functions  │    │ PostgreSQL  │  │   Topics    │      │
-│  │  (Recipes)  │  │             │    │  Multi-AZ   │  │             │      │
-│  └─────────────┘  └─────────────┘    └─────────────┘  └─────────────┘      │
-│                                                              │              │
-│                          ┌─────────────┐                     │              │
-│                          │ API Gateway │◀────────────────────┘              │
-│                          │(On-Demand)  │                                    │
-│                          └─────────────┘                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+## Diagram
 
-### Scaling Benefits
-
-- **SQS**: Handle patient spikes, retry failed orders
-- **Step Functions**: Visual workflow, built-in error handling
-- **ElastiCache**: Reduce DB load for recipe lookups
-- **Multi-AZ RDS**: No single point of failure
-- **SNS**: Real-time staff notifications
-
-### Estimated Monthly Cost (1000 patients)
-
-- Lambda: ~$5
-- Step Functions: ~$10
-- SQS: ~$1
-- RDS Multi-AZ: ~$50
-- ElastiCache: ~$25
-- SNS: ~$1
-- **Total: ~$92/month**
-
----
-
-## Security Considerations
-
-| Concern | Solution |
-|---------|----------|
-| DB credentials | AWS Secrets Manager |
-| Network | VPC with private subnets |
-| Encryption at rest | RDS encryption |
-| Encryption in transit | TLS |
-| Access control | IAM least privilege |
-| Audit | CloudTrail |
-
----
-
-## Implementation Notes
-
-### MVP Deployment Steps
-
-1. Create RDS PostgreSQL instance (db.t3.micro)
-2. Package Lambda function with Prisma client
-3. Configure EventBridge rule with cron schedule
-4. Set up CloudWatch log group
-5. Configure VPC security groups
-
-### Production Considerations
-
-- Use AWS CDK or Terraform for infrastructure as code
-- Implement blue/green deployments for zero-downtime updates
-- Set up CloudWatch alarms for failure detection
-- Configure X-Ray for distributed tracing
-- Implement dead-letter queues for failed orders
+See `banquet_aws_flowchart.png` in this directory.
