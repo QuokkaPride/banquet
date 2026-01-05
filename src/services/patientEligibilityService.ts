@@ -19,39 +19,24 @@ import { getStartOfDay } from '../utils/dateTimeUtils';
 const logger = createLogger('PatientEligibilityService');
 
 /**
- * Finds patients who need meal orders for a specific meal on a specific date.
- * Excludes patients who already have an order for that meal/date.
+ * Finds patients who need meal orders for a specific meal.
+ * Excludes patients who already have an order for that meal type.
+ *
+ * NOTE: Simplified to ignore date - just checks if patient has this meal type.
+ * In production, would filter by date/scheduling window.
  */
 export async function findPatientsRequiringMealOrder(
-  targetDate: Date,
   mealTime: MealTime
 ): Promise<Patient[]> {
-  const dayStart = getStartOfDay(targetDate);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setDate(dayEnd.getDate() + 1);
-
-  logger.info('Finding patients requiring meal orders', {
-    targetDate: targetDate.toISOString(),
-    mealTime,
-    dayStart: dayStart.toISOString(),
-    dayEnd: dayEnd.toISOString(),
-  });
+  logger.info('Finding patients requiring meal orders', { mealTime });
 
   // TODO: [INTEGRATION] Add filter for NPO, discharged, scheduled procedures
   const allPatients = await db.patient.findMany();
 
-  // Get existing orders for this meal/date
+  // Get existing orders for this meal type (simplified - ignores date)
   const existingOrders = await db.trayOrder.findMany({
-    where: {
-      mealTime,
-      scheduledFor: {
-        gte: dayStart,
-        lt: dayEnd,
-      },
-    },
-    select: {
-      patientId: true,
-    },
+    where: { mealTime },
+    select: { patientId: true },
   });
 
   const patientsWithOrders = new Set(existingOrders.map((o) => o.patientId));

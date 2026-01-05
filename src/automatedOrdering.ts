@@ -119,7 +119,7 @@ export async function executeAutomatedMealOrdering(
     logger.info(`--- Processing ${mealTime} ---`);
 
     const mealDateTime = getMealDateTime(targetDate, mealTime);
-    const patientsNeedingOrders = await findPatientsRequiringMealOrder(targetDate, mealTime);
+    const patientsNeedingOrders = await findPatientsRequiringMealOrder(mealTime);
 
     if (patientsNeedingOrders.length === 0) {
       logger.info(`No patients need ${mealTime} orders`);
