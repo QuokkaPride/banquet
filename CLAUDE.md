@@ -2,9 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Primary Goals
+
+Before writing ANY code, ask: Does this directly help achieve one of these three goals?
+
+1. **Auto-Order**: Automatically place meal orders for patients who haven't ordered
+2. **Dietary Constraints**: Ensure orders meet calorie requirements from DietOrder
+3. **AWS Deployment**: Provide production-ready AWS deployment recommendation
+
 ## Project Overview
 
 This is the Banquet Health case challenge - a Smart Ordering system for hospital meal management. The system automatically generates meal orders for patients who haven't placed orders themselves, while respecting dietary constraints.
+
+## Healthcare Safety Guidelines
+
+- **When in doubt, FLAG FOR REVIEW** - set `requiresStaffReview: true`
+- **Never assume** allergies, texture requirements, or dietary restrictions
+- All orders using default constraints trigger staff review
+- Patient safety > operational efficiency
 
 ## Commands
 
@@ -53,3 +68,58 @@ This is the Banquet Health case challenge - a Smart Ordering system for hospital
 - Docker Compose for Postgres
 - Prisma ORM for database operations
 - Seed data includes patients, diet orders, recipes, and sample tray orders
+
+## Naming Conventions
+
+- **Functions**: Verb + Noun (e.g., `findPatientsRequiringMealOrder`, `composeMealWithinConstraints`)
+- **Variables**: Descriptive nouns (e.g., `patientsNeedingOrders`, `calorieRange`)
+- **Booleans**: is/has/should prefix (e.g., `isEligible`, `hasExistingOrder`, `requiresStaffReview`)
+
+## TODO Format
+
+```typescript
+// TODO: [CATEGORY] Description
+// Required: What needs to happen first
+// Rationale: Why this matters
+```
+
+Categories: `SAFETY`, `SCHEMA`, `INTEGRATION`, `OPTIMIZATION`, `FEATURE`
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     entrypoint.ts                            │
+│                           │                                  │
+│                           ▼                                  │
+│                  automatedOrdering.ts                        │
+│                    (orchestrator)                            │
+│                           │                                  │
+│         ┌─────────────────┼─────────────────┐               │
+│         ▼                 ▼                 ▼               │
+│  patientEligibility  mealComposition  trayOrderService      │
+│      Service             Service           Service          │
+│         │                 │                 │               │
+│         ▼                 ▼                 ▼               │
+│    ┌─────────────────────────────────────────┐              │
+│    │           selectionFactors/             │              │
+│    │  calorieConstraint │ allergy │ texture  │              │
+│    └─────────────────────────────────────────┘              │
+│                           │                                  │
+│                           ▼                                  │
+│                     Prisma (db.ts)                          │
+│                           │                                  │
+│                           ▼                                  │
+│                      PostgreSQL                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+```bash
+npm install
+npm run db-up
+npm run init-db
+npm test
+npm start
+```
